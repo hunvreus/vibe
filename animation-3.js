@@ -990,258 +990,161 @@ class SVGTo3D {
     }
   }
 
-  createRecordingOverlay() {
-    const overlay = document.createElement('div');
-    overlay.style.position = 'fixed';
-    overlay.style.top = '0';
-    overlay.style.left = '0';
-    overlay.style.width = '100%';
-    overlay.style.height = '100%';
-    overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-    overlay.style.display = 'flex';
-    overlay.style.flexDirection = 'column';
-    overlay.style.alignItems = 'center';
-    overlay.style.justifyContent = 'center';
-    overlay.style.zIndex = '1000';
-
-    const content = document.createElement('div');
-    content.style.backgroundColor = '#222';
-    content.style.padding = '20px';
-    content.style.borderRadius = '10px';
-    content.style.textAlign = 'center';
-    content.style.color = 'white';
-    content.style.maxWidth = '80%';
-
-    const title = document.createElement('h2');
-    title.style.margin = '0 0 20px 0';
-    title.textContent = 'Recording Video';
-    content.appendChild(title);
-
-    const progress = document.createElement('div');
-    progress.style.marginBottom = '20px';
-    progress.textContent = 'Preparing...';
-    content.appendChild(progress);
-
-    const preview = document.createElement('div');
-    preview.style.display = 'none';
-    preview.style.marginTop = '20px';
-    content.appendChild(preview);
-
-    const buttonContainer = document.createElement('div');
-    buttonContainer.style.marginTop = '20px';
-    buttonContainer.style.display = 'none';
-
-    const downloadButton = document.createElement('button');
-    downloadButton.textContent = 'Download';
-    downloadButton.style.marginRight = '10px';
-    downloadButton.style.padding = '10px 20px';
-    buttonContainer.appendChild(downloadButton);
-
-    const closeButton = document.createElement('button');
-    closeButton.textContent = 'Close';
-    closeButton.style.padding = '10px 20px';
-    closeButton.addEventListener('click', () => {
-      document.body.removeChild(overlay);
-      this.onRecordingComplete();
-    });
-    buttonContainer.appendChild(closeButton);
-
-    content.appendChild(buttonContainer);
-    overlay.appendChild(content);
-
-    return {
-      overlay,
-      progress,
-      preview,
-      buttonContainer,
-      downloadButton
-    };
-  }
-
   startRecording() {
-    // Create and add overlay
-    const ui = this.createRecordingOverlay();
-    document.body.appendChild(ui.overlay);
-
-    // Create recording camera
-    const recordingCamera = new THREE.PerspectiveCamera(
-      75,
-      this.config.video.width / this.config.video.height,
-      0.1,
-      1000
-    );
+    if (this.isRecording) return;
     
-    // Calculate camera position to fit object with padding
-    const box = new THREE.Box3().setFromObject(this.svgGroup);
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y);
-    const fov = recordingCamera.fov * (Math.PI / 180);
-    const cameraZ = (maxDim / 2) / Math.tan(fov / 2) * (1 + this.config.video.padding * 2);
-    recordingCamera.position.z = cameraZ;
-    recordingCamera.updateProjectionMatrix();
-
-    // Create offscreen renderer
-    const recordingRenderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true
-    });
-    recordingRenderer.setSize(this.config.video.width, this.config.video.height);
-    recordingRenderer.setPixelRatio(1);
-
-    // Calculate frames needed for complete rotation(s)
-    const framesPerRotation = Math.ceil((2 * Math.PI) / this.config.rotation.speed);
-    const totalFrames = framesPerRotation * this.config.video.rotations;
+    // Calculate dimensions based on aspect ratio
+    let gifWidth = 500;
+    let gifHeight = 500;
     
-    // Store original rotation speed
-    this.originalRotationSpeed = this.config.rotation.speed;
+    switch (this.config.video.aspectRatio) {
+      case '16:9':
+        gifHeight = Math.round(gifWidth * (9/16));
+        break;
+      case '9:16':
+        gifWidth = Math.round(gifHeight * (9/16));
+        break;
+      case '4:3':
+        gifHeight = Math.round(gifWidth * (3/4));
+        break;
+      case '1:1':
+      default:
+        // Keep as 500x500
+        break;
+    }
     
-    // Reset rotation to start position
-    this.svgGroup.rotation.y = 0;
-
-    // Initialize CCapture
-    this.capturer = new CCapture({
+    // Initialize CCapture with format-specific settings
+    const settings = {
       format: this.config.video.format,
       workersPath: './',
       framerate: this.config.video.fps,
-      verbose: false,
-      display: false,
-      quality: this.config.video.format === 'gif' ? 5 : 0.92,
-      width: this.config.video.width,
-      height: this.config.video.height,
-      ...(this.config.video.format === 'gif' ? {
-        repeat: 0,
-        workers: navigator.hardwareConcurrency || 4,
-        workerPath: './gif.worker.js'
-      } : {
-        name: 'looping-animation'
-      })
-    });
+      verbose: false
+    };
 
-    // Start recording
+    // Add format-specific settings
+    if (this.config.video.format === 'gif') {
+      Object.assign(settings, {
+        quality: 10,
+        width: gifWidth,
+        height: gifHeight,
+        workers: 2,
+        workerScript: './gif.worker.js',
+        dithering: 'FloydSteinberg'
+      });
+    } else {
+      Object.assign(settings, {
+        quality: 100,
+        name: 'animation'
+      });
+    }
+
+    this.capturer = new CCapture(settings);
+
+    // Calculate total frames for one complete rotation
+    const framesPerRotation = Math.ceil((2 * Math.PI) / this.config.rotation.speed);
+    const totalFrames = framesPerRotation * this.config.video.rotations;
+
+    // Store recording state
     this.isRecording = true;
     this.recordingFrames = 0;
     this.totalFrames = totalFrames;
-    this.recordingRenderer = recordingRenderer;
-    this.recordingCamera = recordingCamera;
-    this.recordingUI = ui;
-    this.capturer.start();
+    this.gifDimensions = { width: gifWidth, height: gifHeight };
 
-    // Start background recording loop
-    this.recordFrame();
+    // Store original rotation speed and camera aspect
+    this.originalRotationSpeed = this.config.rotation.speed;
+    this.originalCameraAspect = this.camera.aspect;
+
+    // Reset rotation
+    this.svgGroup.rotation.y = 0;
+
+    // Start capturing
+    this.capturer.start();
   }
 
   recordFrame() {
     if (!this.isRecording) return;
 
-    // Rotate the object
+    // Rotate object
     this.svgGroup.rotation.y += this.config.rotation.speed;
 
-    // Render frame
-    this.recordingRenderer.render(this.scene, this.recordingCamera);
-    this.capturer.capture(this.recordingRenderer.domElement);
+    // For GIFs, use a smaller renderer with proper aspect ratio
+    if (this.config.video.format === 'gif') {
+      if (!this.gifRenderer) {
+        this.gifRenderer = new THREE.WebGLRenderer({ 
+          antialias: false,
+          preserveDrawingBuffer: true
+        });
+        this.gifRenderer.setSize(this.gifDimensions.width, this.gifDimensions.height);
+      }
 
-    // Update progress
-    const progress = Math.round((this.recordingFrames / this.totalFrames) * 100);
-    this.recordingUI.progress.textContent = `Recording: ${progress}%`;
+      // Update camera aspect ratio for GIF recording
+      this.camera.aspect = this.gifDimensions.width / this.gifDimensions.height;
+      this.camera.updateProjectionMatrix();
+
+      // Render and capture
+      this.gifRenderer.render(this.scene, this.camera);
+      this.capturer.capture(this.gifRenderer.domElement);
+    } else {
+      this.capturer.capture(this.renderer.domElement);
+    }
 
     this.recordingFrames++;
     
+    // Update status
+    this.statusElement.textContent = `Recording: ${Math.round((this.recordingFrames / this.totalFrames) * 100)}%`;
+
     if (this.recordingFrames >= this.totalFrames) {
       this.stopRecording();
-    } else {
-      // Schedule next frame using setTimeout instead of requestAnimationFrame
-      setTimeout(() => this.recordFrame(), 1000 / this.config.video.fps);
     }
   }
 
   stopRecording() {
     if (!this.isRecording) return;
+
     this.isRecording = false;
+    this.statusElement.textContent = 'Processing video...';
 
-    // Restore original rotation speed
+    // Restore original rotation speed and camera aspect
     this.config.rotation.speed = this.originalRotationSpeed;
-
-    // Update progress
-    this.recordingUI.progress.textContent = 'Processing video...';
+    if (this.originalCameraAspect) {
+      this.camera.aspect = this.originalCameraAspect;
+      this.camera.updateProjectionMatrix();
+    }
 
     this.capturer.stop();
     this.capturer.save((blob) => {
       const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `animation.${this.config.video.format}`;
+      a.click();
       
-      // Show preview
-      this.recordingUI.preview.style.display = 'block';
-      if (this.config.video.format === 'webm') {
-        const video = document.createElement('video');
-        video.src = url;
-        video.controls = true;
-        video.loop = true;
-        video.style.maxWidth = '100%';
-        video.style.maxHeight = '60vh';
-        this.recordingUI.preview.appendChild(video);
-      } else {
-        const img = document.createElement('img');
-        img.src = url;
-        img.style.maxWidth = '100%';
-        img.style.maxHeight = '60vh';
-        this.recordingUI.preview.appendChild(img);
+      URL.revokeObjectURL(url);
+      this.statusElement.textContent = 'Video saved!';
+
+      // Cleanup GIF renderer if it exists
+      if (this.gifRenderer) {
+        this.gifRenderer.dispose();
+        this.gifRenderer = null;
       }
-
-      // Setup download button
-      this.recordingUI.buttonContainer.style.display = 'block';
-      this.recordingUI.downloadButton.addEventListener('click', () => {
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `looping-animation.${this.config.video.format}`;
-        a.click();
-      });
-
-      this.recordingUI.progress.textContent = 'Video ready!';
     });
-
-    // Cleanup
-    if (this.recordingRenderer) {
-      this.recordingRenderer.dispose();
-      this.recordingRenderer = null;
-    }
   }
 
   animate(timestamp) {
     requestAnimationFrame((t) => this.animate(t));
     
-    // Rotate the SVG if enabled
+    // Regular animation
     if (this.config.rotation.enabled && this.svgGroup.children.length > 0) {
       this.svgGroup.rotation.y += this.config.rotation.speed;
     }
     
     this.controls.update();
+    this.renderer.render(this.scene, this.camera);
 
-    // Regular rendering
-    if (!this.isRecording) {
-      this.renderer.render(this.scene, this.camera);
+    // Handle recording
+    if (this.isRecording) {
+      this.recordFrame();
     }
-    // Recording rendering
-    else {
-      // Render at recording resolution
-      this.recordingRenderer.render(this.scene, this.camera);
-      this.capturer.capture(this.recordingRenderer.domElement);
-
-      // Update progress
-      const progress = Math.round((this.recordingFrames / this.totalFrames) * 100);
-      this.recordingUI.progress.textContent = `Recording: ${progress}%`;
-      
-      this.recordingFrames++;
-      if (this.recordingFrames >= this.totalFrames) {
-        this.stopRecording();
-      }
-
-      // Still render preview at window resolution
-      this.renderer.render(this.scene, this.camera);
-    }
-  }
-
-  onRecordingComplete() {
-    // Re-enable controls if needed
-    this.controls.enabled = true;
   }
 
   // Utility function for debouncing
