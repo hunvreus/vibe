@@ -38,8 +38,13 @@ class SVGTo3D {
       },
       video: {
         fps: 60,
-        duration: 4, // Duration in seconds
-        format: 'webm' // 'webm' or 'gif'
+        duration: 4,
+        format: 'webm',
+        rotations: 1,
+        aspectRatio: '16:9', // New aspect ratio setting
+        width: 1920,         // Default HD size
+        height: 1080,
+        padding: 0.2  // 20% padding around the object
       }
     };
 
@@ -203,6 +208,7 @@ class SVGTo3D {
 
   updateCameraPosition() {
     this.camera.position.z = this.config.zoom;
+    this.camera.updateProjectionMatrix();
   }
 
   onWindowResize() {
@@ -418,6 +424,33 @@ class SVGTo3D {
     // Video export controls
     this.addControlGroup(panel, 'Video Export', [
       {
+        name: 'Format',
+        type: 'select',
+        options: [
+          { value: 'webm', label: 'WebM (Best Quality)' },
+          { value: 'gif', label: 'GIF (Smaller Size)' }
+        ],
+        value: this.config.video.format,
+        callback: (val) => {
+          this.config.video.format = val;
+        }
+      },
+      {
+        name: 'Aspect Ratio',
+        type: 'select',
+        options: [
+          { value: '16:9', label: '16:9 Landscape (1920×1080)' },
+          { value: '9:16', label: '9:16 Portrait (1080×1920)' },
+          { value: '1:1', label: '1:1 Square (1080×1080)' },
+          { value: '4:3', label: '4:3 Classic (1440×1080)' }
+        ],
+        value: this.config.video.aspectRatio,
+        callback: (val) => {
+          this.config.video.aspectRatio = val;
+          this.updateVideoResolution();
+        }
+      },
+      {
         name: 'FPS',
         min: 24,
         max: 60,
@@ -428,26 +461,14 @@ class SVGTo3D {
         }
       },
       {
-        name: 'Duration (s)',
+        name: 'Rotations',
         min: 1,
-        max: 10,
-        step: 0.5,
-        value: this.config.video.duration,
+        max: 4,
+        step: 1,
+        value: 1,
         callback: (val) => {
-          this.config.video.duration = Number(val);
-        }
-      },
-      {
-        name: 'Format',
-        type: 'select',
-        options: [
-          { value: 'mp4', label: 'MP4 (Best for Social Media)' },
-          { value: 'webm', label: 'WebM (High Quality)' },
-          { value: 'gif', label: 'GIF (Small Size)' }
-        ],
-        value: this.config.video.format,
-        callback: (val) => {
-          this.config.video.format = val;
+          const rotations = Number(val);
+          this.config.video.rotations = rotations;
         }
       }
     ]);
@@ -948,118 +969,240 @@ class SVGTo3D {
     this.statusElement.textContent = 'Exporting model...';
   }
 
+  updateVideoResolution() {
+    switch (this.config.video.aspectRatio) {
+      case '16:9':
+        this.config.video.width = 1920;
+        this.config.video.height = 1080;
+        break;
+      case '9:16':
+        this.config.video.width = 1080;
+        this.config.video.height = 1920;
+        break;
+      case '1:1':
+        this.config.video.width = 1080;
+        this.config.video.height = 1080;
+        break;
+      case '4:3':
+        this.config.video.width = 1440;
+        this.config.video.height = 1080;
+        break;
+    }
+  }
+
+  createRecordingOverlay() {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100%';
+    overlay.style.height = '100%';
+    overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    overlay.style.display = 'flex';
+    overlay.style.flexDirection = 'column';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.zIndex = '1000';
+
+    const content = document.createElement('div');
+    content.style.backgroundColor = '#222';
+    content.style.padding = '20px';
+    content.style.borderRadius = '10px';
+    content.style.textAlign = 'center';
+    content.style.color = 'white';
+    content.style.maxWidth = '80%';
+
+    const title = document.createElement('h2');
+    title.style.margin = '0 0 20px 0';
+    title.textContent = 'Recording Video';
+    content.appendChild(title);
+
+    const progress = document.createElement('div');
+    progress.style.marginBottom = '20px';
+    progress.textContent = 'Preparing...';
+    content.appendChild(progress);
+
+    const preview = document.createElement('div');
+    preview.style.display = 'none';
+    preview.style.marginTop = '20px';
+    content.appendChild(preview);
+
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.marginTop = '20px';
+    buttonContainer.style.display = 'none';
+
+    const downloadButton = document.createElement('button');
+    downloadButton.textContent = 'Download';
+    downloadButton.style.marginRight = '10px';
+    downloadButton.style.padding = '10px 20px';
+    buttonContainer.appendChild(downloadButton);
+
+    const closeButton = document.createElement('button');
+    closeButton.textContent = 'Close';
+    closeButton.style.padding = '10px 20px';
+    closeButton.addEventListener('click', () => {
+      document.body.removeChild(overlay);
+      this.onRecordingComplete();
+    });
+    buttonContainer.appendChild(closeButton);
+
+    content.appendChild(buttonContainer);
+    overlay.appendChild(content);
+
+    return {
+      overlay,
+      progress,
+      preview,
+      buttonContainer,
+      downloadButton
+    };
+  }
+
   startRecording() {
-    // Calculate total frames needed for a perfect loop
-    const totalFrames = this.config.video.fps * this.config.video.duration;
-    const rotationPerFrame = (Math.PI * 2) / totalFrames;
+    // Create and add overlay
+    const ui = this.createRecordingOverlay();
+    document.body.appendChild(ui.overlay);
+
+    // Create recording camera
+    const recordingCamera = new THREE.PerspectiveCamera(
+      75,
+      this.config.video.width / this.config.video.height,
+      0.1,
+      1000
+    );
     
-    // Store original rotation speed and set new one for perfect loop
+    // Calculate camera position to fit object with padding
+    const box = new THREE.Box3().setFromObject(this.svgGroup);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y);
+    const fov = recordingCamera.fov * (Math.PI / 180);
+    const cameraZ = (maxDim / 2) / Math.tan(fov / 2) * (1 + this.config.video.padding * 2);
+    recordingCamera.position.z = cameraZ;
+    recordingCamera.updateProjectionMatrix();
+
+    // Create offscreen renderer
+    const recordingRenderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true
+    });
+    recordingRenderer.setSize(this.config.video.width, this.config.video.height);
+    recordingRenderer.setPixelRatio(1);
+
+    // Calculate frames needed for complete rotation(s)
+    const framesPerRotation = Math.ceil((2 * Math.PI) / this.config.rotation.speed);
+    const totalFrames = framesPerRotation * this.config.video.rotations;
+    
+    // Store original rotation speed
     this.originalRotationSpeed = this.config.rotation.speed;
-    this.config.rotation.speed = rotationPerFrame;
     
     // Reset rotation to start position
     this.svgGroup.rotation.y = 0;
 
-    // Initialize CCapture with loop-friendly settings
+    // Initialize CCapture
     this.capturer = new CCapture({
-      format: this.config.video.format === 'mp4' ? 'webm' : this.config.video.format,
+      format: this.config.video.format,
       workersPath: './',
       framerate: this.config.video.fps,
-      verbose: true,
-      // Add format-specific settings for better looping
+      verbose: false,
+      display: false,
+      quality: this.config.video.format === 'gif' ? 5 : 0.92,
+      width: this.config.video.width,
+      height: this.config.video.height,
       ...(this.config.video.format === 'gif' ? {
-        quality: 10,
-        repeat: 0, // 0 means infinite loop for GIFs
-        workers: 4
+        repeat: 0,
+        workers: navigator.hardwareConcurrency || 4,
+        workerPath: './gif.worker.js'
       } : {
-        quality: 0.95,
         name: 'looping-animation'
       })
     });
 
     // Start recording
     this.isRecording = true;
-    this.recordingStartTime = performance.now();
     this.recordingFrames = 0;
+    this.totalFrames = totalFrames;
+    this.recordingRenderer = recordingRenderer;
+    this.recordingCamera = recordingCamera;
+    this.recordingUI = ui;
     this.capturer.start();
+
+    // Start background recording loop
+    this.recordFrame();
+  }
+
+  recordFrame() {
+    if (!this.isRecording) return;
+
+    // Rotate the object
+    this.svgGroup.rotation.y += this.config.rotation.speed;
+
+    // Render frame
+    this.recordingRenderer.render(this.scene, this.recordingCamera);
+    this.capturer.capture(this.recordingRenderer.domElement);
+
+    // Update progress
+    const progress = Math.round((this.recordingFrames / this.totalFrames) * 100);
+    this.recordingUI.progress.textContent = `Recording: ${progress}%`;
+
+    this.recordingFrames++;
+    
+    if (this.recordingFrames >= this.totalFrames) {
+      this.stopRecording();
+    } else {
+      // Schedule next frame using setTimeout instead of requestAnimationFrame
+      setTimeout(() => this.recordFrame(), 1000 / this.config.video.fps);
+    }
   }
 
   stopRecording() {
     if (!this.isRecording) return;
-
     this.isRecording = false;
-    this.capturer.stop();
-    
+
     // Restore original rotation speed
     this.config.rotation.speed = this.originalRotationSpeed;
 
-    // Save the recording with appropriate metadata for looping
+    // Update progress
+    this.recordingUI.progress.textContent = 'Processing video...';
+
+    this.capturer.stop();
     this.capturer.save((blob) => {
-      if (this.config.video.format === 'mp4') {
-        // Convert WebM to MP4
-        this.convertToMP4(blob);
+      const url = URL.createObjectURL(blob);
+      
+      // Show preview
+      this.recordingUI.preview.style.display = 'block';
+      if (this.config.video.format === 'webm') {
+        const video = document.createElement('video');
+        video.src = url;
+        video.controls = true;
+        video.loop = true;
+        video.style.maxWidth = '100%';
+        video.style.maxHeight = '60vh';
+        this.recordingUI.preview.appendChild(video);
       } else {
-        const url = URL.createObjectURL(blob);
+        const img = document.createElement('img');
+        img.src = url;
+        img.style.maxWidth = '100%';
+        img.style.maxHeight = '60vh';
+        this.recordingUI.preview.appendChild(img);
+      }
+
+      // Setup download button
+      this.recordingUI.buttonContainer.style.display = 'block';
+      this.recordingUI.downloadButton.addEventListener('click', () => {
         const a = document.createElement('a');
         a.href = url;
-        a.download = this.config.video.format === 'gif' 
-          ? 'looping-animation.gif' 
-          : 'looping-animation.webm';
+        a.download = `looping-animation.${this.config.video.format}`;
         a.click();
-        URL.revokeObjectURL(url);
-      }
-    });
-  }
+      });
 
-  convertToMP4(webmBlob) {
-    // Create a video element to load the WebM
-    const video = document.createElement('video');
-    video.src = URL.createObjectURL(webmBlob);
-    video.muted = true;
-
-    // Create a canvas to draw the video frames
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-
-    // Set up MediaRecorder for MP4
-    const stream = canvas.captureStream(this.config.video.fps);
-    const mediaRecorder = new MediaRecorder(stream, {
-      mimeType: 'video/mp4;codecs=h264',
-      videoBitsPerSecond: 8000000 // 8 Mbps for high quality
+      this.recordingUI.progress.textContent = 'Video ready!';
     });
 
-    const chunks = [];
-    mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-    mediaRecorder.onstop = () => {
-      const mp4Blob = new Blob(chunks, { type: 'video/mp4' });
-      const url = URL.createObjectURL(mp4Blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'looping-animation.mp4';
-      a.click();
-      URL.revokeObjectURL(url);
-      URL.revokeObjectURL(video.src);
-    };
-
-    // When video is loaded, start the conversion
-    video.onloadedmetadata = () => {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      mediaRecorder.start();
-
-      // Function to draw frames
-      const drawFrame = () => {
-        if (video.ended) {
-          mediaRecorder.stop();
-          return;
-        }
-        ctx.drawImage(video, 0, 0);
-        requestAnimationFrame(drawFrame);
-      };
-
-      video.play();
-      drawFrame();
-    };
+    // Cleanup
+    if (this.recordingRenderer) {
+      this.recordingRenderer.dispose();
+      this.recordingRenderer = null;
+    }
   }
 
   animate(timestamp) {
@@ -1071,19 +1214,34 @@ class SVGTo3D {
     }
     
     this.controls.update();
-    this.renderer.render(this.scene, this.camera);
 
-    // Handle recording
-    if (this.isRecording) {
+    // Regular rendering
+    if (!this.isRecording) {
+      this.renderer.render(this.scene, this.camera);
+    }
+    // Recording rendering
+    else {
+      // Render at recording resolution
+      this.recordingRenderer.render(this.scene, this.camera);
+      this.capturer.capture(this.recordingRenderer.domElement);
+
+      // Update progress
+      const progress = Math.round((this.recordingFrames / this.totalFrames) * 100);
+      this.recordingUI.progress.textContent = `Recording: ${progress}%`;
+      
       this.recordingFrames++;
-      this.capturer.capture(this.renderer.domElement);
-
-      // Check if we've recorded enough frames for a perfect loop
-      const targetFrames = this.config.video.fps * this.config.video.duration;
-      if (this.recordingFrames >= targetFrames) {
+      if (this.recordingFrames >= this.totalFrames) {
         this.stopRecording();
       }
+
+      // Still render preview at window resolution
+      this.renderer.render(this.scene, this.camera);
     }
+  }
+
+  onRecordingComplete() {
+    // Re-enable controls if needed
+    this.controls.enabled = true;
   }
 
   // Utility function for debouncing
