@@ -233,25 +233,14 @@ class SVGTo3D {
   setupControls() {
     // Create control panel container
     const panel = document.createElement('div');
-    panel.style.position = 'absolute';
-    panel.style.top = '10px';
-    panel.style.right = '10px';
-    panel.style.backgroundColor = 'rgba(0,0,0,0.7)';
-    panel.style.padding = '10px';
-    panel.style.borderRadius = '5px';
-    panel.style.color = 'white';
-    panel.style.fontFamily = 'Arial, sans-serif';
-    panel.style.maxWidth = '300px';
-    panel.style.maxHeight = '80vh';
-    panel.style.overflowY = 'auto';
+    panel.className = 'control-panel';
     
     // Add title
     const title = document.createElement('h3');
-    title.textContent = 'SVG to 3D Controls';
-    title.style.marginTop = '0';
+    title.textContent = 'Controls';
     panel.appendChild(title);
 
-    // Size controls
+    // Add control groups
     this.addControlGroup(panel, 'Size Settings', [
       { name: 'Scale', min: 1, max: 50, step: 0.5, value: this.config.size.scale, callback: (val) => {
         this.config.size.scale = Number(val);
@@ -515,28 +504,15 @@ class SVGTo3D {
     // Add download video button
     const downloadButton = document.createElement('button');
     downloadButton.textContent = 'Download Video';
-    downloadButton.style.marginTop = '10px';
-    downloadButton.style.padding = '10px';
-    downloadButton.style.width = '100%';
-    downloadButton.style.backgroundColor = '#4CAF50';
-    downloadButton.style.color = 'white';
-    downloadButton.style.border = 'none';
-    downloadButton.style.borderRadius = '4px';
-    downloadButton.style.cursor = 'pointer';
-    downloadButton.style.fontSize = '14px';
-    downloadButton.style.fontWeight = 'bold';
+    downloadButton.className = 'download-button';
     
     downloadButton.addEventListener('click', () => {
       if (!this.isRecording) {
-        // Disable the button and show progress
         downloadButton.disabled = true;
-        downloadButton.style.backgroundColor = '#cccccc';
         downloadButton.textContent = 'Preparing Video...';
         
-        // Start recording process
         this.startRecording();
         
-        // Update button state during recording
         const updateProgress = () => {
           if (this.isRecording) {
             const progress = Math.round((this.recordingFrames / (this.config.video.fps * this.config.video.duration)) * 100);
@@ -544,7 +520,6 @@ class SVGTo3D {
             requestAnimationFrame(updateProgress);
           } else {
             downloadButton.disabled = false;
-            downloadButton.style.backgroundColor = '#4CAF50';
             downloadButton.textContent = 'Download Video';
           }
         };
@@ -556,7 +531,7 @@ class SVGTo3D {
 
     // File input for SVG upload
     const fileGroup = document.createElement('div');
-    fileGroup.style.marginTop = '15px';
+    fileGroup.className = 'file-group';
     
     const fileLabel = document.createElement('div');
     fileLabel.textContent = 'Upload SVG File';
@@ -565,8 +540,7 @@ class SVGTo3D {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.svg';
-    fileInput.style.marginTop = '5px';
-    fileInput.style.width = '100%';
+    fileInput.className = 'file-input';
     
     fileInput.addEventListener('change', (event) => {
       const file = event.target.files[0];
@@ -588,9 +562,7 @@ class SVGTo3D {
     // Add reset button
     const resetButton = document.createElement('button');
     resetButton.textContent = 'Reset to Default SVG';
-    resetButton.style.marginTop = '15px';
-    resetButton.style.padding = '5px 10px';
-    resetButton.style.width = '100%';
+    resetButton.className = 'reset-button';
     resetButton.addEventListener('click', () => {
       this.loadSVG('./logo.svg');
     });
@@ -599,9 +571,7 @@ class SVGTo3D {
     // Add export button
     const exportButton = document.createElement('button');
     exportButton.textContent = 'Export as GLTF';
-    exportButton.style.marginTop = '10px';
-    exportButton.style.padding = '5px 10px';
-    exportButton.style.width = '100%';
+    exportButton.className = 'export-button';
     exportButton.addEventListener('click', () => {
       this.exportToGLTF();
     });
@@ -612,23 +582,19 @@ class SVGTo3D {
 
   addControlGroup(panel, title, controls) {
     const group = document.createElement('div');
-    group.style.marginTop = '15px';
+    group.className = 'control-group';
     
     const groupTitle = document.createElement('div');
     groupTitle.textContent = title;
-    groupTitle.style.fontWeight = 'bold';
-    groupTitle.style.marginBottom = '5px';
+    groupTitle.className = 'group-title';
     group.appendChild(groupTitle);
     
     controls.forEach(control => {
       const controlRow = document.createElement('div');
-      controlRow.style.display = 'flex';
-      controlRow.style.alignItems = 'center';
-      controlRow.style.marginTop = '5px';
+      controlRow.className = 'control-row';
       
       const label = document.createElement('label');
       label.textContent = control.name + ': ';
-      label.style.flexBasis = '40%';
       controlRow.appendChild(label);
       
       let input;
@@ -647,7 +613,6 @@ class SVGTo3D {
         controlRow.appendChild(input);
       } else if (control.type === 'select') {
         input = document.createElement('select');
-        input.style.flexGrow = '1';
         
         control.options.forEach(option => {
           const optionElement = document.createElement('option');
@@ -663,7 +628,6 @@ class SVGTo3D {
         input = document.createElement('input');
         input.type = 'text';
         input.value = control.value;
-        input.style.flexGrow = '1';
         input.addEventListener('input', () => control.callback(input.value));
         controlRow.appendChild(input);
       } else {
@@ -674,13 +638,10 @@ class SVGTo3D {
         input.max = control.max;
         input.step = control.step || 1;
         input.value = control.value;
-        input.style.flexGrow = '1';
         
         const valueDisplay = document.createElement('span');
         valueDisplay.textContent = control.value;
-        valueDisplay.style.marginLeft = '5px';
-        valueDisplay.style.minWidth = '40px';
-        valueDisplay.style.textAlign = 'right';
+        valueDisplay.className = 'value-display';
         
         input.addEventListener('input', () => {
           const val = input.value;

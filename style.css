@@ -4,7 +4,7 @@ body {
   font-family: Inter, -apple-system, system-ui, sans-serif;
 }
 
-#controls {
+.control-panel {
   background: #272727;
   position: fixed;
   right: 0;
@@ -14,5 +14,46 @@ body {
   height: 100vh;
   color: #fff;
   overflow-y: auto;
-  font-size: 12px;
+  font-size: 11px;
+}
+
+.control-panel h3 {
+  font-weight: 500;
+  font-size: 14px;
+  margin: 0;
+  padding: 10px;
+}
+
+.control-group {
+  border-top: 1px solid #3C3C3C;
+  padding: 10px;
+}
+
+.group-title {
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.control-row {
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  text-align: left;
+}
+
+.control-panel label {
+  color: #B2B2B2;
+  font-weight: 400;
+  width: 100px;
+  white-space: nowrap;
+}
+
+.control-panel input,
+.control-panel select {
+  flex: 1;
+  background: #272727;
+  border: 1px solid #3C3C3C;
+  border-radius: 4px;
+  color: #fff;
+  padding: 5px;
 }
