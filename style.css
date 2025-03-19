@@ -1,0 +1,18 @@
+/* Figma-like panel styling */
+body {
+  margin: 0;
+  font-family: Inter, -apple-system, system-ui, sans-serif;
+}
+
+#controls {
+  background: #272727;
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 240px;
+  height: 100vh;
+  color: #fff;
+  overflow-y: auto;
+  font-size: 12px;
+}
