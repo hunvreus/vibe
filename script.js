@@ -16,7 +16,7 @@ class SVGTo3D {
         depth: 2,
         bevelEnabled: true,
         bevelThickness: 1,
-        bevelSize: 1,
+        bevelSize: 0.5,
         bevelSegments: 100
       },
       text: {
