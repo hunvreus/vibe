@@ -37,7 +37,7 @@ class SVGTo3D {
       zoom: 20,
       showHelpers: false,
       mergeMeshes: false,
-      materialType: 'matcap4', // 'matcap', 'standard', 'basic'
+      materialType: 'matcap1', // 'matcap', 'standard', 'basic'
       material: {
         baseColor: '#00FF00', // Bright green color that will stand out
         blendMode: 'additive', // 'additive', 'normal', 'multiply'
