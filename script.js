@@ -13,11 +13,11 @@ class SVGTo3D {
     // Configuration defaults
     this.config = {
       extrusion: {
-        depth: 20,
-        bevelEnabled: false,
-        bevelThickness: 4,
-        bevelSize: 4,
-        bevelSegments: 10
+        depth: 2,
+        bevelEnabled: true,
+        bevelThickness: 1,
+        bevelSize: 1,
+        bevelSegments: 100
       },
       text: {
         content: '',
@@ -37,7 +37,7 @@ class SVGTo3D {
       zoom: 20,
       showHelpers: false,
       mergeMeshes: false,
-      materialType: 'matcap1', // 'matcap', 'standard', 'basic'
+      materialType: 'matcap4', // 'matcap', 'standard', 'basic'
       material: {
         baseColor: '#00FF00', // Bright green color that will stand out
         blendMode: 'additive', // 'additive', 'normal', 'multiply'
