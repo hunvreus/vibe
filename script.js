@@ -14,7 +14,7 @@ class SVGTo3D {
     this.config = {
       extrusion: {
         depth: 20,
-        bevelEnabled: true,
+        bevelEnabled: false,
         bevelThickness: 4,
         bevelSize: 4,
         bevelSegments: 10
