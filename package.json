@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "ccapture.js-npmfixed": "^1.1.0",
+    "paper": "^0.12.18",
     "svg-path-bounds": "^1.0.2",
     "svg-path-parser": "^1.1.0",
     "three": "^0.174.0",

@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
+import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import CCapture from 'ccapture.js-npmfixed';
 
@@ -16,6 +18,13 @@ class SVGTo3D {
         bevelThickness: 4,
         bevelSize: 4,
         bevelSegments: 10
+      },
+      text: {
+        content: '',
+        size: 50,
+        height: 20,
+        curveSegments: 12,
+        font: null
       },
       size: {
         scale: 15, // Overall scale of the object
@@ -34,7 +43,8 @@ class SVGTo3D {
         blendMode: 'additive', // 'additive', 'normal', 'multiply'
         opacity: 0.8,
         emissiveIntensity: 1.0,
-        wireframe: false
+        wireframe: false,
+        doubleLayer: false  // New setting for double layer effect
       },
       video: {
         fps: 60,
@@ -120,6 +130,9 @@ class SVGTo3D {
     
     // Load default SVG
     this.loadSVG('./logo.svg');
+
+    // Load default font
+    await this.loadFont('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json');
   }
 
   loadTextures() {
@@ -375,6 +388,15 @@ class SVGTo3D {
         }
       },
       {
+        name: 'Double Layer',
+        type: 'checkbox',
+        checked: this.config.material.doubleLayer,
+        callback: (checked) => {
+          this.config.material.doubleLayer = checked;
+          this.regenerateDebounced();
+        }
+      },
+      {
         name: 'Blend Mode',
         type: 'select',
         options: [
@@ -396,17 +418,6 @@ class SVGTo3D {
         value: this.config.material.opacity,
         callback: (val) => {
           this.config.material.opacity = Number(val);
-          this.regenerateDebounced();
-        }
-      },
-      {
-        name: 'Emissive Intensity',
-        min: 0,
-        max: 2,
-        step: 0.1,
-        value: this.config.material.emissiveIntensity,
-        callback: (val) => {
-          this.config.material.emissiveIntensity = Number(val);
           this.regenerateDebounced();
         }
       },
@@ -469,6 +480,34 @@ class SVGTo3D {
         callback: (val) => {
           const rotations = Number(val);
           this.config.video.rotations = rotations;
+        }
+      }
+    ]);
+
+    // Add text input controls before the file input
+    this.addControlGroup(panel, 'Text Input', [
+      {
+        name: 'Text',
+        type: 'text',
+        value: this.config.text.content,
+        callback: (val) => {
+          this.config.text.content = val;
+          if (val) {
+            this.generateText();
+          }
+        }
+      },
+      {
+        name: 'Text Size',
+        min: 10,
+        max: 200,
+        step: 1,
+        value: this.config.text.size,
+        callback: (val) => {
+          this.config.text.size = Number(val);
+          if (this.config.text.content) {
+            this.generateText();
+          }
         }
       }
     ]);
@@ -620,6 +659,13 @@ class SVGTo3D {
         input.value = control.value;
         input.addEventListener('change', () => control.callback(input.value));
         controlRow.appendChild(input);
+      } else if (control.type === 'text') {
+        input = document.createElement('input');
+        input.type = 'text';
+        input.value = control.value;
+        input.style.flexGrow = '1';
+        input.addEventListener('input', () => control.callback(input.value));
+        controlRow.appendChild(input);
       } else {
         // Default to range input
         input = document.createElement('input');
@@ -731,6 +777,18 @@ class SVGTo3D {
   }
 
   createMaterial() {
+    // If wireframe is enabled, force basic material for consistent wireframe support
+    if (this.config.material.wireframe) {
+      return new THREE.MeshBasicMaterial({
+        color: new THREE.Color(this.config.material.baseColor),
+        side: THREE.DoubleSide,
+        wireframe: true,
+        transparent: this.config.material.doubleLayer,
+        opacity: this.config.material.doubleLayer ? this.config.material.opacity : 1,
+        blending: this.getBlendMode()
+      });
+    }
+
     const matcapNumberMatch = this.config.materialType.match(/^matcap(\d+)$/);
     if (matcapNumberMatch) {
       const matcapNum = parseInt(matcapNumberMatch[1]);
@@ -741,40 +799,51 @@ class SVGTo3D {
           return new THREE.MeshBasicMaterial({ color: 0x3366cc, side: THREE.DoubleSide });
         }
 
-        // Create an array of materials
-        return [
-          // Base color material
-          new THREE.MeshBasicMaterial({
-            color: new THREE.Color(this.config.material.baseColor),
-            side: THREE.DoubleSide,
-            wireframe: this.config.material.wireframe
-          }),
-          // Matcap material with configurable blending
-          new THREE.MeshMatcapMaterial({
+        if (this.config.material.doubleLayer) {
+          return [
+            new THREE.MeshMatcapMaterial({
+              matcap: texture,
+              side: THREE.DoubleSide,
+              transparent: false,
+              blending: this.getBlendMode()
+            }),
+            new THREE.MeshBasicMaterial({
+              color: new THREE.Color(this.config.material.baseColor),
+              side: THREE.DoubleSide,
+              transparent: true,
+              opacity: this.config.material.opacity,
+              blending: this.getBlendMode()
+            })
+          ];
+        } else {
+          return new THREE.MeshMatcapMaterial({
             matcap: texture,
             side: THREE.DoubleSide,
-            transparent: true,
-            opacity: this.config.material.opacity,
-            blending: this.getBlendMode(),
-            wireframe: this.config.material.wireframe
-          })
-        ];
+            transparent: false
+          });
+        }
       }
     }
   
     switch (this.config.materialType) {
       case 'standard':
         return new THREE.MeshStandardMaterial({
-          color: 0x3366cc,
+          color: new THREE.Color(this.config.material.baseColor),
           metalness: 0.5,
           roughness: 0.5,
-          side: THREE.DoubleSide
+          side: THREE.DoubleSide,
+          transparent: this.config.material.doubleLayer,
+          opacity: this.config.material.doubleLayer ? this.config.material.opacity : 1,
+          wireframe: this.config.material.wireframe
         });
       case 'basic':
       default:
         return new THREE.MeshBasicMaterial({
-          color: 0x3366cc,
-          side: THREE.DoubleSide
+          color: new THREE.Color(this.config.material.baseColor),
+          side: THREE.DoubleSide,
+          transparent: this.config.material.doubleLayer,
+          opacity: this.config.material.doubleLayer ? this.config.material.opacity : 1,
+          wireframe: this.config.material.wireframe
         });
     }
   }
@@ -812,6 +881,8 @@ class SVGTo3D {
           };
           
           const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+          // Fix SVG orientation
+          geometry.applyMatrix4(new THREE.Matrix4().makeScale(1, -1, 1));
           geometries.push(geometry);
         }
       } catch (error) {
@@ -887,8 +958,13 @@ class SVGTo3D {
     // Reset rotation before regenerating
     this.svgGroup.rotation.set(0, 0, 0);
     
-    // Regenerate the 3D model with updated settings
-    this.generate3D();
+    // Check if we're in text mode
+    if (this.config.text.content) {
+      this.generateText();
+    } else {
+      // Regenerate the 3D model with updated settings
+      this.generate3D();
+    }
     
     // Restore rotation after centering is complete
     this.svgGroup.rotation.copy(currentRotation);
@@ -1167,6 +1243,59 @@ class SVGTo3D {
       default:
         return THREE.NormalBlending;
     }
+  }
+
+  async loadFont(url) {
+    return new Promise((resolve, reject) => {
+      const loader = new FontLoader();
+      loader.load(url, 
+        (font) => {
+          this.config.text.font = font;
+          resolve(font);
+        },
+        undefined,
+        (error) => {
+          console.error('Error loading font:', error);
+          reject(error);
+        }
+      );
+    });
+  }
+
+  generateText() {
+    if (!this.config.text.font || !this.config.text.content) return;
+    
+    this.clearSVGGroup();
+    
+    const geometry = new TextGeometry(this.config.text.content, {
+      font: this.config.text.font,
+      size: this.config.text.size,
+      height: this.config.extrusion.depth, // Use extrusion depth instead of text height
+      curveSegments: this.config.text.curveSegments,
+      bevelEnabled: this.config.extrusion.bevelEnabled,
+      bevelThickness: this.config.extrusion.bevelThickness,
+      bevelSize: this.config.extrusion.bevelSize,
+      bevelSegments: this.config.extrusion.bevelSegments
+    });
+    
+    geometry.center();
+    
+    const material = this.createMaterial();
+    
+    // If material is an array, create multiple meshes
+    if (Array.isArray(material)) {
+      material.forEach((mat) => {
+        const mesh = new THREE.Mesh(geometry.clone(), mat);
+        this.svgGroup.add(mesh);
+      });
+    } else {
+      const mesh = new THREE.Mesh(geometry, material);
+      this.svgGroup.add(mesh);
+    }
+    
+    this.centerSVG();
+    
+    this.statusElement.textContent = 'Text generated successfully';
   }
 }
 
