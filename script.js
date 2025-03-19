@@ -39,7 +39,7 @@ class SVGTo3D {
       mergeMeshes: false,
       materialType: 'matcap1', // 'matcap', 'standard', 'basic'
       material: {
-        baseColor: '#000000',
+        baseColor: '#00FF00', // Bright green color that will stand out
         blendMode: 'additive', // 'additive', 'normal', 'multiply'
         opacity: 0.8,
         emissiveIntensity: 1.0,
@@ -239,6 +239,126 @@ class SVGTo3D {
     const title = document.createElement('h3');
     title.textContent = 'Controls';
     panel.appendChild(title);
+
+    // Add export buttons group at the top
+    const exportGroup = document.createElement('div');
+    exportGroup.className = 'control-group';
+    
+    const exportTitle = document.createElement('div');
+    exportTitle.textContent = 'Export';
+    exportTitle.className = 'group-title';
+    exportGroup.appendChild(exportTitle);
+    
+    const exportButtons = document.createElement('div');
+    exportButtons.className = 'button-group';
+    
+    // Add download video button
+    const downloadButton = document.createElement('button');
+    downloadButton.textContent = 'Video';
+    downloadButton.addEventListener('click', () => {
+      if (!this.isRecording) {
+        downloadButton.disabled = true;
+        downloadButton.textContent = 'Preparing...';
+        
+        this.startRecording();
+        
+        const updateProgress = () => {
+          if (this.isRecording) {
+            const progress = Math.round((this.recordingFrames / (this.config.video.fps * this.config.video.duration)) * 100);
+            downloadButton.textContent = `${progress}%`;
+            requestAnimationFrame(updateProgress);
+          } else {
+            downloadButton.disabled = false;
+            downloadButton.textContent = 'Video';
+          }
+        };
+        updateProgress();
+      }
+    });
+    exportButtons.appendChild(downloadButton);
+
+    // Add export GLTF button
+    const exportButton = document.createElement('button');
+    exportButton.textContent = 'GLTF';
+    exportButton.addEventListener('click', () => {
+      this.exportToGLTF();
+    });
+    exportButtons.appendChild(exportButton);
+    
+    exportGroup.appendChild(exportButtons);
+    panel.appendChild(exportGroup);
+
+    // Add file upload group
+    const fileGroup = document.createElement('div');
+    fileGroup.className = 'control-group';
+    
+    const fileTitle = document.createElement('div');
+    fileTitle.textContent = 'Upload SVG';
+    fileTitle.className = 'group-title';
+    fileGroup.appendChild(fileTitle);
+    
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.svg';
+    fileInput.className = 'file-input';
+    
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const svgData = e.target.result;
+          const blob = new Blob([svgData], {type: 'image/svg+xml'});
+          const url = URL.createObjectURL(blob);
+          this.loadSVG(url);
+        };
+        reader.readAsText(file);
+      }
+    });
+    
+    fileGroup.appendChild(fileInput);
+    panel.appendChild(fileGroup);
+
+    // Add text input controls
+    this.addControlGroup(panel, 'Text Input', [
+      {
+        name: 'Text',
+        type: 'text',
+        value: this.config.text.content,
+        callback: (val) => {
+          this.config.text.content = val;
+          if (val) {
+            this.generateText();
+          }
+        }
+      },
+      {
+        name: 'Text Size',
+        min: 10,
+        max: 200,
+        step: 1,
+        value: this.config.text.size,
+        callback: (val) => {
+          this.config.text.size = Number(val);
+          if (this.config.text.content) {
+            this.generateText();
+          }
+        }
+      },
+      {
+        name: 'Text Depth',
+        min: 0,
+        max: 50,
+        step: 0.5,
+        value: this.config.text.extrusion,
+        callback: (val) => {
+          this.config.text.extrusion = Number(val);
+          if (this.config.text.content) {
+            this.generateText();
+          }
+        }
+      }
+    ]);
 
     // Add control groups
     this.addControlGroup(panel, 'Size Settings', [
@@ -472,110 +592,6 @@ class SVGTo3D {
         }
       }
     ]);
-
-    // Add text input controls before the file input
-    this.addControlGroup(panel, 'Text Input', [
-      {
-        name: 'Text',
-        type: 'text',
-        value: this.config.text.content,
-        callback: (val) => {
-          this.config.text.content = val;
-          if (val) {
-            this.generateText();
-          }
-        }
-      },
-      {
-        name: 'Text Size',
-        min: 10,
-        max: 200,
-        step: 1,
-        value: this.config.text.size,
-        callback: (val) => {
-          this.config.text.size = Number(val);
-          if (this.config.text.content) {
-            this.generateText();
-          }
-        }
-      }
-    ]);
-
-    // Add download video button
-    const downloadButton = document.createElement('button');
-    downloadButton.textContent = 'Download Video';
-    downloadButton.className = 'download-button';
-    
-    downloadButton.addEventListener('click', () => {
-      if (!this.isRecording) {
-        downloadButton.disabled = true;
-        downloadButton.textContent = 'Preparing Video...';
-        
-        this.startRecording();
-        
-        const updateProgress = () => {
-          if (this.isRecording) {
-            const progress = Math.round((this.recordingFrames / (this.config.video.fps * this.config.video.duration)) * 100);
-            downloadButton.textContent = `Recording: ${progress}%`;
-            requestAnimationFrame(updateProgress);
-          } else {
-            downloadButton.disabled = false;
-            downloadButton.textContent = 'Download Video';
-          }
-        };
-        updateProgress();
-      }
-    });
-    
-    panel.appendChild(downloadButton);
-
-    // File input for SVG upload
-    const fileGroup = document.createElement('div');
-    fileGroup.className = 'file-group';
-    
-    const fileLabel = document.createElement('div');
-    fileLabel.textContent = 'Upload SVG File';
-    fileGroup.appendChild(fileLabel);
-    
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.svg';
-    fileInput.className = 'file-input';
-    
-    fileInput.addEventListener('change', (event) => {
-      const file = event.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const svgData = e.target.result;
-          const blob = new Blob([svgData], {type: 'image/svg+xml'});
-          const url = URL.createObjectURL(blob);
-          this.loadSVG(url);
-        };
-        reader.readAsText(file);
-      }
-    });
-    
-    fileGroup.appendChild(fileInput);
-    panel.appendChild(fileGroup);
-
-    // Add reset button
-    const resetButton = document.createElement('button');
-    resetButton.textContent = 'Reset to Default SVG';
-    resetButton.className = 'reset-button';
-    resetButton.addEventListener('click', () => {
-      this.loadSVG('./logo.svg');
-    });
-    panel.appendChild(resetButton);
-
-    // Add export button
-    const exportButton = document.createElement('button');
-    exportButton.textContent = 'Export as GLTF';
-    exportButton.className = 'export-button';
-    exportButton.addEventListener('click', () => {
-      this.exportToGLTF();
-    });
-    panel.appendChild(exportButton);
 
     document.body.appendChild(panel);
   }
@@ -1231,7 +1247,7 @@ class SVGTo3D {
     const geometry = new TextGeometry(this.config.text.content, {
       font: this.config.text.font,
       size: this.config.text.size,
-      height: this.config.extrusion.depth, // Use extrusion depth instead of text height
+      height: this.config.text.extrusion,
       curveSegments: this.config.text.curveSegments,
       bevelEnabled: this.config.extrusion.bevelEnabled,
       bevelThickness: this.config.extrusion.bevelThickness,
